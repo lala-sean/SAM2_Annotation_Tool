@@ -731,9 +731,7 @@ async def sam2_add_points(req: Sam2AddPointsRequest,
     }
 
 @app.post("/sam2/track/start")
-async def sam2_track_start(req: Sam2TrackRequest,
-                           instance_id: int = Query(DEFAULT_INSTANCE)):
-    """启动整段视频的 mask 传播，结果写入 instanceX 的 masks_*. """
+async def sam2_track_start(req: Sam2TrackRequest, instance_id: int = Query(DEFAULT_INSTANCE)):
     instance_id = _norm_instance(instance_id)
 
     if SAM2_PREDICTOR is None:
@@ -762,7 +760,28 @@ async def sam2_track_start(req: Sam2TrackRequest,
                 raise RuntimeError("SAM2 state missing after init")
 
             async with SAM2_LOCK:
+                # Forward propagation
                 for out_frame_idx, out_obj_ids, out_mask_logits in SAM2_PREDICTOR.propagate_in_video(state):
+                    logits = out_mask_logits
+                    if hasattr(logits, "detach"):
+                        logits = logits.detach().cpu()
+                    if hasattr(logits, "numpy"):
+                        logits = logits.numpy()
+
+                    if logits.ndim == 4:      # [N, 1, H, W]
+                        mask_logit = logits[0, 0]
+                    elif logits.ndim == 3:    # [1, H, W] or similar
+                        mask_logit = logits[0] if logits.shape[0] in (1,) else logits.squeeze()
+                    else:                      # [H, W]
+                        mask_logit = logits
+
+                    mask = (mask_logit > 0).astype(np.uint8)
+                    _save_mask_png(req.video_id, region, int(out_frame_idx), mask, instance_id)
+
+                    TRACK_JOBS[key]["current"] = int(out_frame_idx) + 1
+
+                # Backward propagation
+                for out_frame_idx, out_obj_ids, out_mask_logits in SAM2_PREDICTOR.propagate_in_video(state, reverse=True):
                     logits = out_mask_logits
                     if hasattr(logits, "detach"):
                         logits = logits.detach().cpu()
