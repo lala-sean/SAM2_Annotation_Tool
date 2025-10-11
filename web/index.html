@@ -9,6 +9,7 @@
   label { display:inline-block; width:160px; }
   #imgContainer { position:relative; display:inline-block; border:1px solid #ddd; background:#f9f9f9; }
   #preview  { display:block; max-width:80vw; max-height:80vh; z-index:0; position:relative; }
+  #original { display:block; max-width:80vw; max-height:80vh; border:1px solid #ddd; }
   #maskLayer{ position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:1; image-rendering: pixelated; }
   #overlay  { position:absolute; left:0; top:0; pointer-events:none; z-index:2; }
   #slider { width:420px; vertical-align: middle; }
@@ -73,8 +74,9 @@
     <span class="muted" style="margin-left:12px;">左键=正(蓝,1)、右键=负(红,0)、Shift+左=负、U=撤销</span>
   </div>
 
-  <div id="imgContainer">
+  <div id="imgContainer" style="display: flex; gap: 10px;">
     <img id="preview" alt="frame preview"/>
+    <img id="original" alt="original frame" style="max-width:80vw; max-height:80vh; border:1px solid #ddd;"/>
     <img id="maskLayer" alt="mask overlay"/>
     <canvas id="overlay"></canvas>
   </div>
@@ -614,6 +616,10 @@ async function loadFrame(idx) {
   const makeFrameUrl = (i) => `${base}/frame?video_id=${encodeURIComponent(videoId)}&index=${i}`;
   imgEl.src = makeFrameUrl(idx);
 
+  // 原图
+  const originalEl = $("original");
+  originalEl.src = makeFrameUrl(idx);
+
   // 探测 mask（HEAD）
   const maskHeadUrl = `${base}/mask?video_id=${encodeURIComponent(videoId)}&frame_index=${idx}&region=${encodeURIComponent(region)}&instance_id=${inst}`;
   try {
@@ -623,6 +629,10 @@ async function loadFrame(idx) {
       const url  = lastMaskVersionTick ? `${core}&v=${lastMaskVersionTick}` : core;
       maskEl.style.display = "block";
       maskEl.src = url;
+
+      // 确保 maskLayer 的大小与 preview 一致
+      maskEl.style.width = `${imgEl.clientWidth}px`;
+      maskEl.style.height = `${imgEl.clientHeight}px`;
     } else {
       maskEl.style.display = "none";
       maskEl.src = "";
